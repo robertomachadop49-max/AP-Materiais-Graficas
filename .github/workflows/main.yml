@@ -1,0 +1,38 @@
+name: Gerar APK - AP Materiais Gráficas
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - principal
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Instalar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Preparar projeto Android
+        run: flutter create . --platforms=android
+
+      - name: Instalar dependências
+        run: flutter pub get
+
+      - name: Gerar arquivos Isar
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Gerar APK
+        run: flutter build apk --release
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AP-Materiais-Graficas-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
