@@ -22,7 +22,7 @@ dependencies:
   # Datas e valores
   intl: ^0.20.2
 
-  # WhatsApp / links externos
+  # WhatsApp e links
   url_launcher: ^6.3.2
 
   # Gerar imagem do pedido
