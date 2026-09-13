@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - principal
+      - main
 
 jobs:
   build:
@@ -19,20 +19,29 @@ jobs:
         with:
           channel: stable
 
+      - name: Extrair projeto
+        run: |
+          mkdir -p app
+          unzip -o AP_Materiais_Graficas_Offline_v5.zip -d app
+
       - name: Preparar projeto Android
+        working-directory: app
         run: flutter create . --platforms=android --project-name ap_materiais_graficas
 
       - name: Instalar dependências
+        working-directory: app
         run: flutter pub get
 
       - name: Gerar arquivos Isar
+        working-directory: app
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Gerar APK
+        working-directory: app
         run: flutter build apk --release
 
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
           name: AP-Materiais-Graficas-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: app/build/app/outputs/flutter-apk/app-release.apk
