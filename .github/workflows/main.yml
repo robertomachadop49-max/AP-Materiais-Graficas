@@ -1,4 +1,4 @@
-name: Gerar APK - AP Materiais Gráficas
+name: Gerar APK - AP Materiais Graficas
 
 on:
   workflow_dispatch:
@@ -11,8 +11,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Baixar projeto
         uses: actions/checkout@v4
+
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Instalar Flutter
         uses: subosito/flutter-action@v2
@@ -25,82 +32,83 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1 || true)
+          ZIP="$(find . -maxdepth 2 -type f -name '*.zip' | head -n 1)"
 
-          if [ -n "$ZIP_FILE" ]; then
-            echo "ZIP encontrado: $ZIP_FILE"
-            mkdir -p projeto_extraido
-            unzip -o "$ZIP_FILE" -d projeto_extraido
-          else
-            echo "Nenhum ZIP encontrado. Usando arquivos do repositório."
+          if [ -z "$ZIP" ]; then
+            echo "ERRO: Nenhum arquivo ZIP encontrado."
+            exit 1
           fi
 
-      - name: Localizar projeto Flutter
+          echo "ZIP encontrado: $ZIP"
+
+          rm -rf app_project
+          mkdir -p app_project
+
+          unzip -q "$ZIP" -d app_project
+
+          echo "Projeto extraido."
+
+      - name: Encontrar projeto Flutter
         shell: bash
         run: |
           set -e
 
-          PUBSPEC=$(find . -type f -name "pubspec.yaml" \
-            -not -path "./.git/*" \
-            -print -quit)
+          PUBSPEC="$(find app_project -type f -name pubspec.yaml | head -n 1)"
 
           if [ -z "$PUBSPEC" ]; then
-            echo "ERRO: pubspec.yaml não encontrado."
+            echo "ERRO: pubspec.yaml nao encontrado."
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PUBSPEC")
+          PROJECT_DIR="$(dirname "$PUBSPEC")"
 
           echo "Projeto Flutter encontrado em:"
           echo "$PROJECT_DIR"
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Preparar projeto Android
+      - name: Corrigir url_launcher
         shell: bash
         run: |
-          cd "$PROJECT_DIR"
+          set -e
 
+          echo "Corrigindo url_launcher..."
+
+          sed -i 's/url_launcher: \^6\.3\.3/url_launcher: ^6.3.2/g' "$PROJECT_DIR/pubspec.yaml"
+
+          echo "Dependencia atual:"
+          grep "url_launcher" "$PROJECT_DIR/pubspec.yaml"
+
+      - name: Preparar projeto Android
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
           flutter create . \
             --platforms=android \
-            --project-name=ap_materiais_graficas
+            --project-name ap_materiais_graficas
 
-      - name: Instalar dependências
-        shell: bash
+      - name: Instalar dependencias
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          cd "$PROJECT_DIR"
-
           flutter pub get
 
-          echo "Verificando build_runner..."
-          dart pub deps | grep build_runner || true
-
-      - name: Garantir ferramentas de geração
-        shell: bash
+      - name: Garantir ferramentas de geracao
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          cd "$PROJECT_DIR"
-
-          flutter pub add --dev build_runner
-          flutter pub add --dev isar_community_generator
-
+          dart pub add --dev build_runner:^2.5.4
+          dart pub add --dev isar_community_generator:^3.3.2
           flutter pub get
 
       - name: Gerar arquivos Isar
-        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          cd "$PROJECT_DIR"
-
-          dart run build_runner build \
-            --delete-conflicting-outputs
+          dart run build_runner build --delete-conflicting-outputs
 
       - name: Gerar APK
-        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          cd "$PROJECT_DIR"
-
           flutter build apk --release
 
-      - name: Disponibilizar APK
+      - name: Publicar APK
         uses: actions/upload-artifact@v4
         with:
           name: AP-Materiais-Graficas-APK
