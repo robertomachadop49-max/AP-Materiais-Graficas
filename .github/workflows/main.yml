@@ -20,7 +20,7 @@ jobs:
           channel: stable
 
       - name: Preparar projeto Android
-        run: flutter create . --platforms=android
+        run: flutter create . --platforms=android --project-name ap_materiais_graficas
 
       - name: Instalar dependências
         run: flutter pub get
