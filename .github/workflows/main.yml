@@ -18,30 +18,91 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
       - name: Extrair projeto
+        shell: bash
         run: |
-          mkdir -p app
-          unzip -o AP_Materiais_Graficas_Offline_v5.zip -d app
+          set -e
+
+          ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1 || true)
+
+          if [ -n "$ZIP_FILE" ]; then
+            echo "ZIP encontrado: $ZIP_FILE"
+            mkdir -p projeto_extraido
+            unzip -o "$ZIP_FILE" -d projeto_extraido
+          else
+            echo "Nenhum ZIP encontrado. Usando arquivos do repositório."
+          fi
+
+      - name: Localizar projeto Flutter
+        shell: bash
+        run: |
+          set -e
+
+          PUBSPEC=$(find . -type f -name "pubspec.yaml" \
+            -not -path "./.git/*" \
+            -print -quit)
+
+          if [ -z "$PUBSPEC" ]; then
+            echo "ERRO: pubspec.yaml não encontrado."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PUBSPEC")
+
+          echo "Projeto Flutter encontrado em:"
+          echo "$PROJECT_DIR"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Preparar projeto Android
-        working-directory: app
-        run: flutter create . --platforms=android --project-name ap_materiais_graficas
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          flutter create . \
+            --platforms=android \
+            --project-name=ap_materiais_graficas
 
       - name: Instalar dependências
-        working-directory: app
-        run: flutter pub get
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          flutter pub get
+
+          echo "Verificando build_runner..."
+          dart pub deps | grep build_runner || true
+
+      - name: Garantir ferramentas de geração
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          flutter pub add --dev build_runner
+          flutter pub add --dev isar_community_generator
+
+          flutter pub get
 
       - name: Gerar arquivos Isar
-        working-directory: app
-        run: dart run build_runner build --delete-conflicting-outputs
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          dart run build_runner build \
+            --delete-conflicting-outputs
 
       - name: Gerar APK
-        working-directory: app
-        run: flutter build apk --release
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          flutter build apk --release
 
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
           name: AP-Materiais-Graficas-APK
-          path: app/build/app/outputs/flutter-apk/app-release.apk
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
