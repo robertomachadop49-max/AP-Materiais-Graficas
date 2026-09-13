@@ -1,49 +1,108 @@
-name: ap_materiais_graficas
-description: Sistema de vendas offline - AP Materiais Gráficas
-publish_to: "none"
+name: Gerar APK - AP Materiais Gráficas
 
-version: 1.0.0+1
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-environment:
-  sdk: ">=3.0.0 <4.0.0"
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-dependencies:
-  flutter:
-    sdk: flutter
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
 
-  # Banco de dados offline
-  isar_community: ^3.3.2
-  isar_community_flutter_libs: ^3.3.2
+      - name: Instalar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
-  # Arquivos e armazenamento
-  path_provider: ^2.1.5
-  path: ^1.9.1
+      - name: Extrair projeto
+        shell: bash
+        run: |
+          set -e
 
-  # Datas e valores
-  intl: ^0.20.2
+          ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1 || true)
 
-  # WhatsApp e links
-  url_launcher: ^6.3.2
+          if [ -n "$ZIP_FILE" ]; then
+            echo "ZIP encontrado: $ZIP_FILE"
+            mkdir -p projeto_extraido
+            unzip -o "$ZIP_FILE" -d projeto_extraido
+          else
+            echo "Nenhum ZIP encontrado. Usando arquivos do repositório."
+          fi
 
-  # Gerar imagem do pedido
-  screenshot: ^3.0.0
-  image: ^4.5.4
+      - name: Localizar projeto Flutter
+        shell: bash
+        run: |
+          set -e
 
-  # Compartilhar arquivos
-  share_plus: ^11.0.0
+          PUBSPEC=$(find . -type f -name "pubspec.yaml" \
+            -not -path "./.git/*" \
+            -print -quit)
 
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
+          if [ -z "$PUBSPEC" ]; then
+            echo "ERRO: pubspec.yaml não encontrado."
+            exit 1
+          fi
 
-  flutter_lints: ^5.0.0
+          PROJECT_DIR=$(dirname "$PUBSPEC")
 
-  # Geração dos arquivos do Isar
-  build_runner: ^2.5.4
-  isar_community_generator: ^3.3.2
+          echo "Projeto Flutter encontrado em:"
+          echo "$PROJECT_DIR"
 
-flutter:
-  uses-material-design: true
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-  assets:
-    - assets/logo.png
+      - name: Preparar projeto Android
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          flutter create . \
+            --platforms=android \
+            --project-name=ap_materiais_graficas
+
+      - name: Instalar dependências
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          flutter pub get
+
+          echo "Verificando build_runner..."
+          dart pub deps | grep build_runner || true
+
+      - name: Garantir ferramentas de geração
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          flutter pub add --dev build_runner
+          flutter pub add --dev isar_community_generator
+
+          flutter pub get
+
+      - name: Gerar arquivos Isar
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          dart run build_runner build \
+            --delete-conflicting-outputs
+
+      - name: Gerar APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          flutter build apk --release
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: AP-Materiais-Graficas-APK
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
